@@ -1,12 +1,12 @@
 # 🎵 Pulse Music Player
 
-A modern, responsive web-based music player built with **Next.js, TypeScript, Tailwind CSS, and the HTML5 Audio API**.
+### 🌐 Live Demo
 
-## 👤 Developer
+**[https://pulse-music-player-xi.vercel.app/](https://pulse-music-player-xi.vercel.app/)**
 
-**Name:** Maheen Jawad  
-**Internship Domain:** Web Development  
-**Project:** Task 3 — Music Player
+A modern, responsive web-based music player built with **Next.js, React, TypeScript, Tailwind CSS, and Lucide Icons**.
+
+Pulse provides a Spotify-inspired music experience with playlists, search, genre filtering, persistent liked songs, playback controls, and a responsive bottom music player.
 
 ---
 
@@ -17,7 +17,7 @@ A modern, responsive web-based music player built with **Next.js, TypeScript, Ta
 - ⏭️ Next track
 - 🔀 Shuffle playback
 - 🔁 Repeat playback
-- 🎚️ Track progress bar with seek control
+- 🎚️ Audio progress/seek bar
 - 🔊 Volume control
 - 🔇 Mute/unmute
 - ❤️ Like/unlike songs
@@ -25,12 +25,27 @@ A modern, responsive web-based music player built with **Next.js, TypeScript, Ta
 - 💾 Persistent current track
 - 💾 Persistent volume, shuffle, and repeat settings
 - 🔎 Search songs, artists, and albums
-- 🎼 Genre filtering
-- 📁 Playlist functionality
-- 📱 Responsive mobile navigation
-- ▶️ Automatic next-track playback
-- 🖼️ Album artwork for every track
-- 🌙 Dark modern music-player interface
+- 🎼 Browse music by genre
+- 📚 Playlist functionality
+- 🎧 Auto-play next track
+- 📱 Responsive mobile layout
+- 📂 Mobile navigation sidebar
+- 🖼️ Album artwork for tracks
+- ⚡ Fast and responsive Next.js interface
+
+---
+
+## 📋 Internship Task
+
+### Task 3: Music Player
+
+The project fulfills the following internship requirements:
+
+- Design a web-based music player with playlist functionality.
+- Include features for searching and categorizing music.
+- Implement play, pause, skip, and volume control functionalities.
+
+---
 
 ## 🛠️ Technologies Used
 
@@ -43,103 +58,131 @@ A modern, responsive web-based music player built with **Next.js, TypeScript, Ta
 - **localStorage**
 - **Vercel**
 
-## 📂 Project Structure
+---
 
-```text
-pulse-music-player/
-├── app/
-│   └── page.tsx
-├── components/
-│   └── music/
-│       └── MusicPlayer.tsx
-├── data/
-│   └── tracks.ts
-├── hooks/
-│   └── useAudioPlayer.ts
-├── public/
-│   ├── audio/
-│   └── covers/
-├── types/
-│   └── music.ts
-├── .gitignore
-├── next.config.ts
-├── package.json
-└── README.md
+## 🎧 Music Player Controls
 
-```
+The bottom music player includes:
 
-## 🎧 Music Player Functionality
+- Current track artwork
+- Song title and artist
+- Like button
+- Shuffle
+- Previous
+- Play/Pause
+- Next
+- Repeat
+- Track progress bar
+- Current time and duration
+- Volume control
+- Mute/unmute
 
-The application uses a custom `useAudioPlayer` hook to manage the HTML5 audio element.
+The player automatically advances to the next track when a song finishes.
 
-The hook handles:
+---
 
-- Audio loading
-- Play/pause state
-- Current playback time
-- Track duration
-- Volume
-- Seeking
-- Track completion
-- Automatic playback
-- Audio cleanup when tracks change
+## 📚 Playlist System
 
-The main `MusicPlayer` component manages the user interface and higher-level functionality such as playlists, search, genres, likes, shuffle, repeat, and track navigation.
+Pulse includes:
 
-## 💾 Local Storage
+- ❤️ Liked Songs
+- 🎧 Deep Focus
+- 🌙 Late Night
 
-The application saves user preferences in the browser using `localStorage`.
+Liked songs are stored in the browser using `localStorage`, so the user's liked music remains available after refreshing the page.
 
-Saved information includes:
+---
 
-```text
-pulse-liked-songs
-pulse-volume
-pulse-shuffle
-pulse-repeat
-pulse-current-track
+## 🔎 Search & Genre Filtering
 
-```
-
-This allows selected preferences and liked songs to remain available after refreshing the page.
-
-## 📋 Internship Requirement — Task 3
-
-The project fulfills the required Music Player functionality:
-
-### Playlist Functionality
-
-Users can browse and select playlists including:
-
-- Liked Songs
-- Deep Focus
-- Late Night
-
-### Music Search
-
-Users can search by:
+Users can search through the music library by:
 
 - Song title
 - Artist
 - Album
 
-### Music Categorization
+Music can also be filtered by genre using the genre navigation.
 
-Songs can be filtered by genre.
+---
 
-### Playback Controls
+## 💾 Persistent Settings
 
-The player includes:
+The application saves the following preferences locally:
 
-- Play
-- Pause
-- Previous
-- Next
-- Shuffle
-- Repeat
-- Progress/seek control
-- Volume control
-- Mute/unmute
+- Liked songs
+- Current track
+- Volume
+- Shuffle mode
+- Repeat mode
+
+This allows the music experience to continue across page reloads.
+
+---
+
+## 📱 Responsive Design
+
+The interface is designed to work across:
+
+- 💻 Desktop
+- 💻 Laptop
+- 📱 Mobile
+- 📱 Tablet
+
+The sidebar automatically changes into a mobile navigation menu on smaller screens.
+
+---
+
+## 📂 Project Structure
+
+```text
+pulse-music-player/
+│
+├── app/
+│   └── page.tsx
+│
+├── components/
+│   └── music/
+│       └── MusicPlayer.tsx
+│
+├── data/
+│   └── tracks.ts
+│
+├── hooks/
+│   └── useAudioPlayer.ts
+│
+├── public/
+│   ├── audio/
+│   │   ├── afterglow.mp3
+│   │   ├── city-lights.mp3
+│   │   ├── electric-soul.mp3
+│   │   ├── golden-hour.mp3
+│   │   ├── midnight-drive.mp3
+│   │   ├── orbit.mp3
+│   │   ├── slow-motion.mp3
+│   │   └── street-dreams.mp3
+│   │
+│   └── covers/
+│       ├── afterglow.jpg
+│       ├── city-lights.jpg
+│       ├── electric-soul.jpg
+│       ├── golden-hour.jpg
+│       ├── midnight-drive.jpg
+│       ├── orbit.jpg
+│       ├── slow-motion.jpg
+│       └── street-dreams.jpg
+│
+├── types/
+│   └── music.ts
+│
+├── .gitignore
+├── next.config.ts
+├── package.json
+├── package-lock.json
+└── README.md
+
+```
+
+---
 
 ## 🚀 Run Locally
 
@@ -150,7 +193,7 @@ git clone https://github.com/Maheenjawad31/pulse-music-player.git
 
 ```
 
-Open the project:
+Move into the project:
 
 ```bash
 cd pulse-music-player
@@ -178,39 +221,35 @@ http://localhost:3000
 
 ```
 
+---
+
 ## 🌐 Deployment
 
-The project is designed for deployment using **Vercel**.
+The project is deployed using **Vercel**.
 
-The production deployment can be connected directly to the GitHub repository:
+### Live Application
 
-```text
-https://github.com/Maheenjawad31/pulse-music-player
-
-```
-
-## 🔒 Project Notes
-
-Environment files and generated dependencies are excluded through `.gitignore`.
-
-The following are not intended to be committed:
-
-```text
-node_modules/
-.next/
-.env*
-.vercel/
-
-```
-
-## 📄 Internship Submission
-
-This project was completed as part of the **Web Development Internship**.
-
-**Developer:** Maheen Jawad  
-**Domain:** Web Development  
-**Task:** Task 3 — Music Player
+[https://pulse-music-player-xi.vercel.app/](https://pulse-music-player-xi.vercel.app/)
 
 ---
 
-⭐ Built with Next.js and TypeScript.
+## 👩‍💻 Developer
+
+**Maheen Jawad**
+
+**Internship Domain:** Web Development
+
+---
+
+## 📌 Internship Project
+
+This project was developed as part of the **Arch Technologies Web Development Internship**.
+
+The implementation focuses on creating a functional and responsive music player while demonstrating React component development, state management, browser storage, audio controls, filtering, search, playlist functionality, and deployment.
+
+---
+
+## 📄 License
+
+This project was created for educational and internship purposes.
+
