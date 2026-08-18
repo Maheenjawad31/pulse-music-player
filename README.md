@@ -1,36 +1,216 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎵 Pulse Music Player
 
-## Getting Started
+A modern, responsive web-based music player built with **Next.js, TypeScript, Tailwind CSS, and the HTML5 Audio API**.
 
-First, run the development server:
+## 👤 Developer
+
+**Name:** Maheen Jawad  
+**Internship Domain:** Web Development  
+**Project:** Task 3 — Music Player
+
+---
+
+## ✨ Features
+
+- 🎵 Play and pause music
+- ⏮️ Previous track
+- ⏭️ Next track
+- 🔀 Shuffle playback
+- 🔁 Repeat playback
+- 🎚️ Track progress bar with seek control
+- 🔊 Volume control
+- 🔇 Mute/unmute
+- ❤️ Like/unlike songs
+- 💾 Persistent liked songs using localStorage
+- 💾 Persistent current track
+- 💾 Persistent volume, shuffle, and repeat settings
+- 🔎 Search songs, artists, and albums
+- 🎼 Genre filtering
+- 📁 Playlist functionality
+- 📱 Responsive mobile navigation
+- ▶️ Automatic next-track playback
+- 🖼️ Album artwork for every track
+- 🌙 Dark modern music-player interface
+
+## 🛠️ Technologies Used
+
+- **Next.js**
+- **React**
+- **TypeScript**
+- **Tailwind CSS**
+- **Lucide React**
+- **HTML5 Audio API**
+- **localStorage**
+- **Vercel**
+
+## 📂 Project Structure
+
+```text
+pulse-music-player/
+├── app/
+│   └── page.tsx
+├── components/
+│   └── music/
+│       └── MusicPlayer.tsx
+├── data/
+│   └── tracks.ts
+├── hooks/
+│   └── useAudioPlayer.ts
+├── public/
+│   ├── audio/
+│   └── covers/
+├── types/
+│   └── music.ts
+├── .gitignore
+├── next.config.ts
+├── package.json
+└── README.md
+
+```
+
+## 🎧 Music Player Functionality
+
+The application uses a custom `useAudioPlayer` hook to manage the HTML5 audio element.
+
+The hook handles:
+
+- Audio loading
+- Play/pause state
+- Current playback time
+- Track duration
+- Volume
+- Seeking
+- Track completion
+- Automatic playback
+- Audio cleanup when tracks change
+
+The main `MusicPlayer` component manages the user interface and higher-level functionality such as playlists, search, genres, likes, shuffle, repeat, and track navigation.
+
+## 💾 Local Storage
+
+The application saves user preferences in the browser using `localStorage`.
+
+Saved information includes:
+
+```text
+pulse-liked-songs
+pulse-volume
+pulse-shuffle
+pulse-repeat
+pulse-current-track
+
+```
+
+This allows selected preferences and liked songs to remain available after refreshing the page.
+
+## 📋 Internship Requirement — Task 3
+
+The project fulfills the required Music Player functionality:
+
+### Playlist Functionality
+
+Users can browse and select playlists including:
+
+- Liked Songs
+- Deep Focus
+- Late Night
+
+### Music Search
+
+Users can search by:
+
+- Song title
+- Artist
+- Album
+
+### Music Categorization
+
+Songs can be filtered by genre.
+
+### Playback Controls
+
+The player includes:
+
+- Play
+- Pause
+- Previous
+- Next
+- Shuffle
+- Repeat
+- Progress/seek control
+- Volume control
+- Mute/unmute
+
+## 🚀 Run Locally
+
+Clone the repository:
+
+```bash
+git clone https://github.com/Maheenjawad31/pulse-music-player.git
+
+```
+
+Open the project:
+
+```bash
+cd pulse-music-player
+
+```
+
+Install dependencies:
+
+```bash
+npm install
+
+```
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
 
-## Learn More
+## 🌐 Deployment
 
-To learn more about Next.js, take a look at the following resources:
+The project is designed for deployment using **Vercel**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The production deployment can be connected directly to the GitHub repository:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```text
+https://github.com/Maheenjawad31/pulse-music-player
 
-## Deploy on Vercel
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔒 Project Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Environment files and generated dependencies are excluded through `.gitignore`.
+
+The following are not intended to be committed:
+
+```text
+node_modules/
+.next/
+.env*
+.vercel/
+
+```
+
+## 📄 Internship Submission
+
+This project was completed as part of the **Web Development Internship**.
+
+**Developer:** Maheen Jawad  
+**Domain:** Web Development  
+**Task:** Task 3 — Music Player
+
+---
+
+⭐ Built with Next.js and TypeScript.
