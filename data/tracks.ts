@@ -83,7 +83,7 @@ export const tracks: Track[] = [
   },
 ];
 
-export const playlists: Playlist[] = [
+export const defaultPlaylists: Playlist[] = [
   {
     id: "liked",
     name: "Liked Songs",
@@ -92,12 +92,20 @@ export const playlists: Playlist[] = [
   {
     id: "focus",
     name: "Deep Focus",
-    trackIds: ["slow-motion", "orbit", "midnight-drive"],
+    trackIds: [
+      "slow-motion",
+      "orbit",
+      "midnight-drive",
+    ],
   },
   {
     id: "night",
     name: "Late Night",
-    trackIds: ["city-lights", "street-dreams", "afterglow"],
+    trackIds: [
+      "city-lights",
+      "street-dreams",
+      "afterglow",
+    ],
   },
 ];
 

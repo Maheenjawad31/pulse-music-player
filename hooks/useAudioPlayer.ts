@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-
 import type { Track } from "@/types/music";
 
 type AudioPlayerOptions = {
@@ -16,38 +15,22 @@ type AudioPlayerOptions = {
 export function useAudioPlayer(
   track: Track,
   shouldAutoPlay = false,
-  options: AudioPlayerOptions = {}
+  options: AudioPlayerOptions = {},
 ) {
-  const audioRef =
-    useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const onEndedRef = useRef(options.onEnded);
 
-  const onEndedRef =
-    useRef(options.onEnded);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(track.duration);
+  const [volume, setVolumeState] = useState(0.8);
 
-  const [isPlaying, setIsPlaying] =
-    useState(false);
-
-  const [currentTime, setCurrentTime] =
-    useState(0);
-
-  const [duration, setDuration] =
-    useState(track.duration);
-
-  const [volume, setVolumeState] =
-    useState(0.8);
-
-  /*
-   * Keep the latest onEnded callback
-   * without recreating the audio element.
-   */
   useEffect(() => {
-    onEndedRef.current =
-      options.onEnded;
+    onEndedRef.current = options.onEnded;
   }, [options.onEnded]);
 
   /*
-   * Create a new audio element whenever
-   * the track changes.
+   * Create a new audio element only when the track URL changes.
    */
   useEffect(() => {
     const audio = new Audio();
@@ -62,22 +45,18 @@ export function useAudioPlayer(
     setDuration(track.duration);
     setIsPlaying(false);
 
-    const handleLoadedMetadata =
-      () => {
-        if (
-          Number.isFinite(audio.duration) &&
-          audio.duration > 0
-        ) {
-          setDuration(audio.duration);
-        }
-      };
+    const handleLoadedMetadata = () => {
+      if (
+        Number.isFinite(audio.duration) &&
+        audio.duration > 0
+      ) {
+        setDuration(audio.duration);
+      }
+    };
 
-    const handleTimeUpdate =
-      () => {
-        setCurrentTime(
-          audio.currentTime
-        );
-      };
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
 
     const handlePlay = () => {
       setIsPlaying(true);
@@ -88,73 +67,60 @@ export function useAudioPlayer(
     };
 
     const handleEnded = async () => {
-      setIsPlaying(false);
-    
-      /*
-       * Reset the visual progress.
-       */
-      setCurrentTime(0);
-    
-      /*
-       * Let MusicPlayer decide whether
-       * to repeat, shuffle, or go next.
-       */
       const shouldReplay =
         onEndedRef.current?.() === true;
-    
+
       if (shouldReplay) {
         audio.currentTime = 0;
-    
+
         try {
           await audio.play();
         } catch (error) {
           console.error(
             "Repeat playback failed:",
-            error
+            error,
           );
-    
           setIsPlaying(false);
         }
+
+        return;
       }
+
+      setIsPlaying(false);
+      setCurrentTime(0);
     };
 
     const handleError = () => {
       console.error(
         "Audio failed to load:",
-        track.audioUrl
+        track.audioUrl,
       );
-
       setIsPlaying(false);
     };
 
     audio.addEventListener(
       "loadedmetadata",
-      handleLoadedMetadata
+      handleLoadedMetadata,
     );
-
     audio.addEventListener(
       "timeupdate",
-      handleTimeUpdate
+      handleTimeUpdate,
     );
-
     audio.addEventListener(
       "play",
-      handlePlay
+      handlePlay,
     );
-
     audio.addEventListener(
       "pause",
-      handlePause
+      handlePause,
     );
-
     audio.addEventListener(
       "ended",
-      handleEnded
+      handleEnded,
     );
-
     audio.addEventListener(
       "error",
-      handleError
+      handleError,
     );
 
     return () => {
@@ -162,250 +128,217 @@ export function useAudioPlayer(
 
       audio.removeEventListener(
         "loadedmetadata",
-        handleLoadedMetadata
+        handleLoadedMetadata,
       );
-
       audio.removeEventListener(
         "timeupdate",
-        handleTimeUpdate
+        handleTimeUpdate,
       );
-
       audio.removeEventListener(
         "play",
-        handlePlay
+        handlePlay,
       );
-
       audio.removeEventListener(
         "pause",
-        handlePause
+        handlePause,
       );
-
       audio.removeEventListener(
         "ended",
-        handleEnded
+        handleEnded,
       );
-
       audio.removeEventListener(
         "error",
-        handleError
+        handleError,
       );
 
       audio.src = "";
 
-      if (
-        audioRef.current === audio
-      ) {
+      if (audioRef.current === audio) {
         audioRef.current = null;
       }
     };
   }, [track.audioUrl]);
 
   /*
+   * Keep duration synchronized.
+   */
+  useEffect(() => {
+    setDuration(track.duration);
+  }, [track.duration]);
+
+  /*
    * Keep volume synchronized.
    */
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume =
-        volume;
+      audioRef.current.volume = volume;
     }
   }, [volume]);
 
   /*
    * Play.
    */
-  const play = useCallback(
-    async () => {
-      const audio =
-        audioRef.current;
+  const play = useCallback(async () => {
+    const audio = audioRef.current;
 
-      if (!audio) {
-        return false;
-      }
+    if (!audio) {
+      return false;
+    }
 
-      try {
-        await audio.play();
-
-        return true;
-      } catch (error) {
-        console.error(
-          "Playback failed:",
-          error
-        );
-
-        setIsPlaying(false);
-
-        return false;
-      }
-    },
-    []
-  );
+    try {
+      await audio.play();
+      return true;
+    } catch (error) {
+      console.error(
+        "Playback failed:",
+        error,
+      );
+      setIsPlaying(false);
+      return false;
+    }
+  }, []);
 
   /*
    * Pause.
    */
-  const pause = useCallback(
-    () => {
-      audioRef.current?.pause();
-    },
-    []
-  );
+  const pause = useCallback(() => {
+    audioRef.current?.pause();
+  }, []);
 
   /*
-   * Toggle play/pause.
+   * Toggle.
    */
-  const togglePlay =
-    useCallback(
-      async () => {
-        const audio =
-          audioRef.current;
+  const togglePlay = useCallback(async () => {
+    const audio = audioRef.current;
 
-        if (!audio) {
-          return;
-        }
+    if (!audio) {
+      return;
+    }
 
-        if (audio.paused) {
-          await play();
-        } else {
-          pause();
-        }
-      },
-      [play, pause]
-    );
+    if (audio.paused) {
+      await play();
+    } else {
+      pause();
+    }
+  }, [play, pause]);
 
   /*
    * Seek.
    */
   const seek = useCallback(
     (time: number) => {
-      const audio =
-        audioRef.current;
+      const audio = audioRef.current;
 
       if (!audio) {
         return;
       }
 
       const actualDuration =
-        Number.isFinite(
-          audio.duration
-        ) &&
+        Number.isFinite(audio.duration) &&
         audio.duration > 0
           ? audio.duration
           : duration;
 
       const safeTime = Math.max(
         0,
-        Math.min(
-          time,
-          actualDuration
-        )
+        Math.min(time, actualDuration),
       );
 
-      audio.currentTime =
-        safeTime;
-
-      setCurrentTime(
-        safeTime
-      );
+      audio.currentTime = safeTime;
+      setCurrentTime(safeTime);
     },
-    [duration]
+    [duration],
   );
 
   /*
-   * Restart current track.
+   * Restart.
    */
-  const restart = useCallback(
-    async () => {
-      const audio =
-        audioRef.current;
+  const restart = useCallback(async () => {
+    const audio = audioRef.current;
 
-      if (!audio) {
-        return;
-      }
+    if (!audio) {
+      return;
+    }
 
-      audio.currentTime = 0;
-      setCurrentTime(0);
+    audio.currentTime = 0;
+    setCurrentTime(0);
 
-      try {
-        await audio.play();
-      } catch (error) {
-        console.error(
-          "Restart failed:",
-          error
-        );
-      }
-    },
-    []
-  );
+    try {
+      await audio.play();
+    } catch (error) {
+      console.error(
+        "Restart failed:",
+        error,
+      );
+    }
+  }, []);
 
   /*
    * Volume.
    */
-  const setVolume =
-    useCallback(
-      (value: number) => {
-        const nextVolume =
-          Math.max(
-            0,
-            Math.min(1, value)
-          );
+  const setVolume = useCallback(
+    (value: number) => {
+      const nextVolume = Math.max(
+        0,
+        Math.min(1, value),
+      );
 
-        setVolumeState(
-          nextVolume
-        );
+      setVolumeState(nextVolume);
 
-        if (audioRef.current) {
-          audioRef.current.volume =
-            nextVolume;
-        }
-      },
-      []
-    );
+      if (audioRef.current) {
+        audioRef.current.volume = nextVolume;
+      }
+    },
+    [],
+  );
 
   /*
-   * Auto-play when a new track
-   * has been selected.
+   * Auto-play whenever a new track is selected.
+   *
+   * The small delay lets the new Audio element
+   * finish being attached before play() is called.
    */
   useEffect(() => {
     if (!shouldAutoPlay) {
       return;
     }
 
-    const audio =
-      audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
     let cancelled = false;
 
-    const startPlayback =
-      async () => {
-        try {
-          await audio.play();
+    const startPlayback = async () => {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
 
-          if (cancelled) {
-            audio.pause();
-          }
-        } catch (error) {
+      if (cancelled) {
+        return;
+      }
+
+      const audio = audioRef.current;
+
+      if (!audio) {
+        return;
+      }
+
+      try {
+        await audio.play();
+      } catch (error) {
+        if (!cancelled) {
           console.error(
             "Auto-play failed:",
-            error
+            error,
           );
-
           setIsPlaying(false);
         }
-      };
+      }
+    };
 
-    startPlayback();
+    void startPlayback();
 
     return () => {
       cancelled = true;
     };
-  }, [
-    track.audioUrl,
-    shouldAutoPlay,
-  ]);
+  }, [track.audioUrl, shouldAutoPlay]);
 
   return {
     isPlaying,

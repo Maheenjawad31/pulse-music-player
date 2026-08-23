@@ -7,1699 +7,2021 @@ import {
   useState,
 } from "react";
 
-import Image from "next/image";
-
-import {
-  Heart,
-  Home,
-  Library,
-  ListMusic,
-  Menu,
-  Music2,
-  Pause,
-  Play,
-  Repeat,
-  Search,
-  Shuffle,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  X,
-} from "lucide-react";
-
-import {
-  genres,
-  tracks,
-} from "@/data/tracks";
-
-import {
-  useAudioPlayer,
-} from "@/hooks/useAudioPlayer";
-
 import type {
-  Genre,
+  Playlist,
   Track,
 } from "@/types/music";
 
-function formatTime(
-  seconds: number
-) {
-  const safeSeconds =
-    Math.max(
-      0,
-      Math.floor(seconds || 0)
-    );
+import {
+  tracks,
+  defaultPlaylists,
+  genres,
+} from "@/data/tracks";
 
-  const minutes =
-    Math.floor(
-      safeSeconds / 60
-    );
+import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 
-  const remaining =
-    safeSeconds % 60;
+type RepeatMode =
+  | "off"
+  | "all"
+  | "one";
+
+function formatTime(seconds: number) {
+  if (!Number.isFinite(seconds)) {
+    return "0:00";
+  }
+
+  const minutes = Math.floor(
+    seconds / 60,
+  );
+
+  const remaining = Math.floor(
+    seconds % 60,
+  );
 
   return `${minutes}:${remaining
     .toString()
     .padStart(2, "0")}`;
 }
 
-const playlistTracks = {
-  "Deep Focus": [
-    "slow-motion",
-    "orbit",
-    "midnight-drive",
-  ],
-
-  "Late Night": [
-    "city-lights",
-    "street-dreams",
-    "afterglow",
-  ],
-};
-
-type PlaylistName =
-  | "Liked Songs"
-  | "Deep Focus"
-  | "Late Night";
-
-const STORAGE_KEYS = {
-  liked: "pulse-liked-songs",
-  volume: "pulse-volume",
-  shuffle: "pulse-shuffle",
-  repeat: "pulse-repeat",
-  currentTrack:
-    "pulse-current-track",
-};
+function makeId() {
+  return `playlist-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+}
 
 export default function MusicPlayer() {
-  /*
-   * -----------------------------
-   * BASIC STATE
-   * -----------------------------
-   */
+  const [selectedTrackId, setSelectedTrackId] =
+    useState(tracks[0]?.id ?? "");
 
-  const [
-    selectedGenre,
-    setSelectedGenre,
-  ] = useState<Genre>("All");
+  const [shouldAutoPlay, setShouldAutoPlay] =
+    useState(false);
 
-  const [
-    search,
-    setSearch,
-  ] = useState("");
+  const [query, setQuery] =
+    useState("");
 
-  const [
-    currentTrack,
-    setCurrentTrack,
-  ] = useState<Track>(
-    tracks[0]
-  );
+  const [selectedGenre, setSelectedGenre] =
+    useState<(typeof genres)[number]>("All");
 
-  const [
-    shouldAutoPlay,
-    setShouldAutoPlay,
-  ] = useState(false);
+    const [playlists, setPlaylists] =
+    useState<Playlist[]>(defaultPlaylists);
+  
+  const [activePlaylistId, setActivePlaylistId] =
+    useState<string | null>(null);
+  
+  const [likedIds, setLikedIds] =
+    useState<string[]>([]);
+  
+  const [storageLoaded, setStorageLoaded] =
+    useState(false);
 
-  const [
-    shuffle,
-    setShuffle,
-  ] = useState(false);
+  const [shuffle, setShuffle] =
+    useState(false);
 
-  const [
-    repeat,
-    setRepeat,
-  ] = useState(false);
+  const [repeat, setRepeat] =
+    useState<RepeatMode>("off");
 
-  const [
-    liked,
-    setLiked,
-  ] = useState<string[]>([]);
+  const [isFullPlayerOpen, setIsFullPlayerOpen] =
+    useState(false);
 
-  const [
-    activePlaylist,
-    setActivePlaylist,
-  ] =
-    useState<PlaylistName | null>(
-      null
+  const [isSidebarOpen, setIsSidebarOpen] =
+    useState(false);
+
+  const [isPlaylistModalOpen, setIsPlaylistModalOpen] =
+    useState(false);
+
+  const [newPlaylistName, setNewPlaylistName] =
+    useState("");
+
+  const [playlistForTrack, setPlaylistForTrack] =
+    useState<string | null>(null);
+
+    const currentTrack =
+  tracks.find(
+    (track) => track.id === selectedTrackId,
+  ) ?? tracks[0];
+
+  const upNextTracks = useMemo(() => {
+    if (!currentTrack) {
+      return [];
+    }
+  
+    const currentIndex = tracks.findIndex(
+      (track) => track.id === currentTrack.id,
     );
-
-  const [
-    sidebarOpen,
-    setSidebarOpen,
-  ] = useState(false);
-
-  const [
-    settingsLoaded,
-    setSettingsLoaded,
-  ] = useState(false);
-
-  const [
-    initialVolume,
-    setInitialVolume,
-  ] = useState(0.8);
-
+  
+    if (shuffle) {
+      return tracks
+        .filter((track) => track.id !== currentTrack.id)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3);
+    }
+  
+    const upcoming: Track[] = [];
+  
+    for (let i = 1; i <= tracks.length; i++) {
+      const nextIndex = currentIndex + i;
+  
+      if (nextIndex < tracks.length) {
+        upcoming.push(tracks[nextIndex]);
+      } else if (repeat === "all") {
+        upcoming.push(
+          tracks[nextIndex % tracks.length],
+        );
+      }
+    }
+  
+    return upcoming.slice(0, 3);
+  }, [currentTrack, shuffle, repeat]);
   /*
-   * -----------------------------
-   * RESTORE SETTINGS
-   * -----------------------------
-   */
-
+ * Load saved playlists and liked songs once.
+ */
   useEffect(() => {
     try {
-      /*
-       * Restore liked songs.
-       */
-      const savedLiked =
-        localStorage.getItem(
-          STORAGE_KEYS.liked
+      const savedPlaylists = localStorage.getItem(
+        "pulse-playlists"
+      );
+  
+      const savedLikes = localStorage.getItem(
+        "pulse-liked"
+      );
+  
+      if (savedPlaylists) {
+        const parsedPlaylists = JSON.parse(
+          savedPlaylists
         );
-
-      if (savedLiked) {
-        const parsed =
-          JSON.parse(
-            savedLiked
-          );
-
-        if (
-          Array.isArray(parsed)
-        ) {
-          setLiked(
-            parsed.filter(
-              (id) =>
-                typeof id ===
-                "string"
-            )
-          );
+  
+        if (Array.isArray(parsedPlaylists)) {
+          setPlaylists(parsedPlaylists);
         }
       }
-
-      /*
-       * Restore volume.
-       */
-      const savedVolume =
-        localStorage.getItem(
-          STORAGE_KEYS.volume
+  
+      if (savedLikes) {
+        const parsedLikes = JSON.parse(
+          savedLikes
         );
-
-      if (savedVolume) {
-        const parsed =
-          Number(
-            savedVolume
-          );
-
-        if (
-          Number.isFinite(
-            parsed
-          ) &&
-          parsed >= 0 &&
-          parsed <= 1
-        ) {
-          setInitialVolume(
-            parsed
-          );
+  
+        if (Array.isArray(parsedLikes)) {
+          setLikedIds(parsedLikes);
         }
-      }
-
-      /*
-       * Restore shuffle.
-       */
-      const savedShuffle =
-        localStorage.getItem(
-          STORAGE_KEYS.shuffle
-        );
-
-      if (
-        savedShuffle ===
-        "true"
-      ) {
-        setShuffle(true);
-      }
-
-      /*
-       * Restore repeat.
-       */
-      const savedRepeat =
-        localStorage.getItem(
-          STORAGE_KEYS.repeat
-        );
-
-      if (
-        savedRepeat ===
-        "true"
-      ) {
-        setRepeat(true);
-      }
-
-      /*
-       * Restore current track.
-       */
-      const savedTrackId =
-        localStorage.getItem(
-          STORAGE_KEYS.currentTrack
-        );
-
-      if (savedTrackId) {
-        const savedTrack =
-          tracks.find(
-            (track) =>
-              track.id ===
-              savedTrackId
-          );
-
-        if (savedTrack) {
-          setCurrentTrack(
-            savedTrack
-          );
-        } else {
-          setCurrentTrack(
-            tracks[0]
-          );
-        }
-      } else {
-        setCurrentTrack(
-          tracks[0]
-        );
       }
     } catch (error) {
-      console.warn(
-        "Could not restore Pulse settings.",
+      console.error(
+        "Failed to load saved music data:",
         error
       );
-
-      setCurrentTrack(
-        tracks[0]
-      );
     } finally {
-      setSettingsLoaded(true);
+      setStorageLoaded(true);
     }
   }, []);
 
- /*
- * -----------------------------
- * AUDIO ENDED HANDLER
- * -----------------------------
+/*
+ * Save playlists only after localStorage
+ * has finished loading.
  */
+useEffect(() => {
+  if (!storageLoaded) return;
 
-const handleTrackEnded =
-useCallback(() => {
-  /*
-   * Repeat current song.
-   */
-  if (repeat) {
-    return true;
-  }
-
-  /*
-   * Shuffle.
-   */
-  if (
-    shuffle &&
-    tracks.length > 1
-  ) {
-    const candidates =
-      tracks.filter(
-        (track) =>
-          track.id !==
-          currentTrack.id
-      );
-
-    if (
-      candidates.length
-    ) {
-      const randomIndex =
-        Math.floor(
-          Math.random() *
-            candidates.length
-        );
-
-      setShouldAutoPlay(true);
-
-      setCurrentTrack(
-        candidates[randomIndex]
-      );
-
-      return false;
-    }
-  }
-
-  /*
-   * Normal next track.
-   */
-  const index =
-    tracks.findIndex(
-      (track) =>
-        track.id ===
-        currentTrack.id
+  try {
+    localStorage.setItem(
+      "pulse-playlists",
+      JSON.stringify(playlists)
     );
+  } catch (error) {
+    console.error(
+      "Failed to save playlists:",
+      error
+    );
+  }
+}, [playlists, storageLoaded]);
 
-  const nextIndex =
-    index >=
-    tracks.length - 1
-      ? 0
-      : index + 1;
+/*
+ * Save liked songs only after localStorage
+ * has finished loading.
+ */
+useEffect(() => {
+  if (!storageLoaded) return;
 
-  setShouldAutoPlay(true);
-
-  setCurrentTrack(
-    tracks[nextIndex]
-  );
-
-  return false;
-}, [
-  currentTrack.id,
-  repeat,
-  shuffle,
-]);
-  /*
-   * -----------------------------
-   * AUDIO PLAYER
-   * -----------------------------
-   */
-
-  const {
-    isPlaying,
-    currentTime,
-    duration,
-    volume,
-    togglePlay,
-    setVolume,
-    seek,
-    restart,
-  } = useAudioPlayer(
-    currentTrack,
-    shouldAutoPlay,
-    {
-      onEnded:
-        handleTrackEnded,
-    }
-  );
+  try {
+    localStorage.setItem(
+      "pulse-liked",
+      JSON.stringify(likedIds)
+    );
+  } catch (error) {
+    console.error(
+      "Failed to save likes:",
+      error
+    );
+  }
+}, [likedIds, storageLoaded]);
+ 
 
   /*
-   * Apply restored volume.
+   * What should happen when a song ends?
    */
-  useEffect(() => {
-    if (
-      settingsLoaded &&
-      initialVolume !== 0.8
-    ) {
-      setVolume(
-        initialVolume
-      );
-    }
-  }, [
-    settingsLoaded,
-    initialVolume,
-    setVolume,
-  ]);
-
-  /*
-   * -----------------------------
-   * SAVE SETTINGS
-   * -----------------------------
-   */
-
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.liked,
-        JSON.stringify(liked)
-      );
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [
-    liked,
-    settingsLoaded,
-  ]);
-
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.volume,
-        String(volume)
-      );
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [
-    volume,
-    settingsLoaded,
-  ]);
-
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.shuffle,
-        String(shuffle)
-      );
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [
-    shuffle,
-    settingsLoaded,
-  ]);
-
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.repeat,
-        String(repeat)
-      );
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [
-    repeat,
-    settingsLoaded,
-  ]);
-
-  /*
-   * Save current song only AFTER
-   * settings have been restored.
-   *
-   * This prevents tracks[0] from
-   * overwriting the saved song
-   * during the initial render.
-   */
-  useEffect(() => {
-    if (!settingsLoaded) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(
-        STORAGE_KEYS.currentTrack,
-        currentTrack.id
-      );
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [
-    currentTrack.id,
-    settingsLoaded,
-  ]);
-
-  /*
-   * -----------------------------
-   * PLAYLIST SOURCE
-   * -----------------------------
-   */
-
-  const playlistSource =
-    useMemo(() => {
-      if (
-        activePlaylist ===
-        "Liked Songs"
-      ) {
-        return tracks.filter(
-          (track) =>
-            liked.includes(
-              track.id
-            )
-        );
+  const handleTrackEnded =
+    useCallback(() => {
+      if (!currentTrack) {
+        return false;
       }
 
-      if (
-        activePlaylist ===
-        "Deep Focus"
-      ) {
-        return tracks.filter(
-          (track) =>
-            playlistTracks[
-              "Deep Focus"
-            ].includes(
-              track.id
-            )
-        );
+      if (repeat === "one") {
+        return true;
       }
 
-      if (
-        activePlaylist ===
-        "Late Night"
-      ) {
-        return tracks.filter(
+      const currentIndex =
+        tracks.findIndex(
           (track) =>
-            playlistTracks[
-              "Late Night"
-            ].includes(
-              track.id
-            )
+            track.id === currentTrack.id,
         );
-      }
 
-      return tracks;
-    }, [
-      activePlaylist,
-      liked,
-    ]);
+      let nextIndex: number;
 
-  /*
-   * -----------------------------
-   * SEARCH + GENRE
-   * -----------------------------
-   */
-
-  const filteredTracks =
-    useMemo(() => {
-      const query =
-        search
-          .toLowerCase()
-          .trim();
-
-      return playlistSource.filter(
-        (track) => {
-          const matchesGenre =
-            selectedGenre ===
-              "All" ||
-            track.genre ===
-              selectedGenre;
-
-          const matchesSearch =
-            !query ||
-            track.title
-              .toLowerCase()
-              .includes(query) ||
-            track.artist
-              .toLowerCase()
-              .includes(query) ||
-            track.album
-              .toLowerCase()
-              .includes(query);
-
-          return (
-            matchesGenre &&
-            matchesSearch
+      if (shuffle) {
+        const possible =
+          tracks.filter(
+            (track) =>
+              track.id !==
+              currentTrack.id,
           );
-        }
-      );
-    }, [
-      playlistSource,
-      search,
-      selectedGenre,
-    ]);
 
-  /*
-   * -----------------------------
-   * TRACK SELECTION
-   * -----------------------------
-   */
-
-  const selectTrack =
-    useCallback(
-      (track: Track) => {
-        if (
-          track.id ===
-          currentTrack.id
-        ) {
-          togglePlay();
-          return;
+        if (possible.length === 0) {
+          return repeat === "all";
         }
+
+        const randomIndex =
+          Math.floor(
+            Math.random() *
+              possible.length,
+          );
+
+        setSelectedTrackId(
+          possible[randomIndex].id,
+        );
 
         setShouldAutoPlay(true);
 
-        setCurrentTrack(
-          track
-        );
-      },
-      [
-        currentTrack.id,
-        togglePlay,
-      ]
-    );
+        return false;
+      }
 
-  /*
-   * -----------------------------
-   * LIKE
-   * -----------------------------
-   */
+      nextIndex = currentIndex + 1;
 
-  const toggleLike =
-    useCallback(
-      (id: string) => {
-        setLiked(
-          (current) =>
-            current.includes(id)
-              ? current.filter(
-                  (trackId) =>
-                    trackId !==
-                    id
-                )
-              : [
-                  ...current,
-                  id,
-                ]
-        );
-      },
-      []
-    );
+      if (
+        nextIndex >= tracks.length
+      ) {
+        if (repeat === "all") {
+          nextIndex = 0;
+        } else {
+          return false;
+        }
+      }
 
-  /*
-   * -----------------------------
-   * HOME
-   * -----------------------------
-   */
-
-  const goHome =
-    useCallback(() => {
-      setActivePlaylist(
-        null
+      setSelectedTrackId(
+        tracks[nextIndex].id,
       );
 
-      setSearch("");
+      setShouldAutoPlay(true);
 
-      setSelectedGenre(
-        "All"
-      );
+      return false;
+    }, [
+      currentTrack,
+      repeat,
+      shuffle,
+    ]);
 
-      setSidebarOpen(false);
-    }, []);
-
-  /*
-   * -----------------------------
-   * PLAYLIST
-   * -----------------------------
-   */
-
-  const selectPlaylist =
-    useCallback(
-      (
-        playlist: PlaylistName
-      ) => {
-        setActivePlaylist(
-          (current) =>
-            current ===
-            playlist
-              ? null
-              : playlist
-        );
-
-        setSearch("");
-
-        setSelectedGenre(
-          "All"
-        );
-
-        setSidebarOpen(false);
+  const player =
+    useAudioPlayer(
+      currentTrack,
+      shouldAutoPlay,
+      {
+        onEnded: handleTrackEnded,
       },
-      []
     );
+
+    useEffect(() => {
+      const handleKeyDown = (event: KeyboardEvent) => {
+        const target = event.target as HTMLElement | null;
+    
+        // Don't control music while typing.
+        if (
+          target?.tagName === "INPUT" ||
+          target?.tagName === "TEXTAREA" ||
+          target?.isContentEditable
+        ) {
+          return;
+        }
+    
+        if (event.code === "Space") {
+          event.preventDefault();
+          void player.togglePlay();
+          return;
+        }
+    
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          player.seek(
+            Math.max(0, player.currentTime - 5),
+          );
+          return;
+        }
+    
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          player.seek(
+            Math.min(
+              player.duration,
+              player.currentTime + 5,
+            ),
+          );
+          return;
+        }
+      };
+    
+      document.addEventListener(
+        "keydown",
+        handleKeyDown,
+        true,
+      );
+    
+      return () => {
+        document.removeEventListener(
+          "keydown",
+          handleKeyDown,
+          true,
+        );
+      };
+    }, [player]);
+  /*
+   * Auto-play is only needed for the transition.
+   */
+  useEffect(() => {
+    if (!shouldAutoPlay) {
+      return;
+    }
+
+    setShouldAutoPlay(false);
+  }, [
+    shouldAutoPlay,
+    selectedTrackId,
+  ]);
 
   /*
-   * -----------------------------
-   * NEXT / PREVIOUS
-   * -----------------------------
+   * Current playlist.
    */
+  const activePlaylist =
+    playlists.find(
+      (playlist) =>
+        playlist.id ===
+        activePlaylistId,
+    ) ?? null;
 
-  const currentIndex =
-    tracks.findIndex(
-      (track) =>
-        track.id ===
-        currentTrack.id
-    );
+  /*
+   * Songs shown on screen.
+   */
+  const visibleTracks =
+    useMemo(() => {
+      let result = tracks;
 
-  const getRandomTrack =
-    useCallback(() => {
+      if (activePlaylist) {
+        result = result.filter(
+          (track) =>
+            activePlaylist.trackIds.includes(
+              track.id,
+            ),
+        );
+      }
+
+      if (selectedGenre !== "All") {
+        result = result.filter(
+          (track) =>
+            track.genre ===
+            selectedGenre,
+        );
+      }
+
+      const normalizedQuery =
+        query.trim().toLowerCase();
+
+      if (normalizedQuery) {
+        result = result.filter(
+          (track) =>
+            track.title
+              .toLowerCase()
+              .includes(normalizedQuery) ||
+            track.artist
+              .toLowerCase()
+              .includes(normalizedQuery) ||
+            track.album
+              .toLowerCase()
+              .includes(normalizedQuery) ||
+            track.genre
+              .toLowerCase()
+              .includes(normalizedQuery),
+        );
+      }
+
+      return result;
+    }, [
+      activePlaylist,
+      selectedGenre,
+      query,
+    ]);
+
+  /*
+   * Select and play a track.
+   */
+  const playTrack = useCallback(
+    (track: Track) => {
+      if (
+        track.id === selectedTrackId
+      ) {
+        void player.togglePlay();
+        return;
+      }
+
+      setSelectedTrackId(track.id);
+      setShouldAutoPlay(true);
+    },
+    [
+      player,
+      selectedTrackId,
+    ],
+  );
+
+  /*
+   * Next track.
+   */
+  const nextTrack = useCallback(() => {
+    if (!currentTrack) {
+      return;
+    }
+
+    if (shuffle) {
       const candidates =
         tracks.filter(
           (track) =>
             track.id !==
-            currentTrack.id
+            currentTrack.id,
         );
 
-      if (
-        !candidates.length
-      ) {
-        return null;
+      if (candidates.length) {
+        const random =
+          candidates[
+            Math.floor(
+              Math.random() *
+                candidates.length,
+            )
+          ];
+
+        setSelectedTrackId(random.id);
+        setShouldAutoPlay(true);
       }
 
-      const index =
-        Math.floor(
-          Math.random() *
-            candidates.length
-        );
+      return;
+    }
 
-      return candidates[
-        index
-      ];
-    }, [
-      currentTrack.id,
-    ]);
-
-  const playNext =
-    useCallback(() => {
-      if (shuffle) {
-        const randomTrack =
-          getRandomTrack();
-
-        if (randomTrack) {
-          setShouldAutoPlay(
-            true
-          );
-
-          setCurrentTrack(
-            randomTrack
-          );
-
-          return;
-        }
-      }
-
-      const nextIndex =
-        currentIndex >=
-        tracks.length - 1
-          ? 0
-          : currentIndex + 1;
-
-      setShouldAutoPlay(true);
-
-      setCurrentTrack(
-        tracks[nextIndex]
+    const index =
+      tracks.findIndex(
+        (track) =>
+          track.id ===
+          currentTrack.id,
       );
-    }, [
-      currentIndex,
-      shuffle,
-      getRandomTrack,
-    ]);
 
-  const playPrevious =
+    let nextIndex = index + 1;
+
+    if (
+      nextIndex >= tracks.length
+    ) {
+      nextIndex =
+        repeat === "all"
+          ? 0
+          : tracks.length - 1;
+    }
+
+    setSelectedTrackId(
+      tracks[nextIndex].id,
+    );
+
+    setShouldAutoPlay(true);
+  }, [
+    currentTrack,
+    shuffle,
+    repeat,
+  ]);
+
+  /*
+   * Previous track.
+   */
+  const previousTrack =
     useCallback(() => {
-      /*
-       * If the song is more than
-       * 3 seconds in, previous
-       * first restarts it.
-       */
-      if (currentTime > 3) {
-        restart();
+      if (!currentTrack) {
         return;
       }
 
-      if (shuffle) {
-        const randomTrack =
-          getRandomTrack();
-
-        if (randomTrack) {
-          setShouldAutoPlay(
-            true
-          );
-
-          setCurrentTrack(
-            randomTrack
-          );
-
-          return;
-        }
+      if (
+        player.currentTime > 3
+      ) {
+        player.seek(0);
+        return;
       }
 
-      const previousIndex =
-        currentIndex <= 0
-          ? tracks.length - 1
-          : currentIndex - 1;
+      const index =
+        tracks.findIndex(
+          (track) =>
+            track.id ===
+            currentTrack.id,
+        );
+
+      let previousIndex =
+        index - 1;
+
+      if (previousIndex < 0) {
+        previousIndex =
+          repeat === "all"
+            ? tracks.length - 1
+            : 0;
+      }
+
+      setSelectedTrackId(
+        tracks[previousIndex].id,
+      );
 
       setShouldAutoPlay(true);
-
-      setCurrentTrack(
-        tracks[
-          previousIndex
-        ]
-      );
     }, [
-      currentIndex,
-      currentTime,
-      shuffle,
-      getRandomTrack,
-      restart,
+      currentTrack,
+      player,
+      repeat,
     ]);
 
   /*
-   * -----------------------------
-   * SEARCH
-   * -----------------------------
+   * Like / unlike.
    */
+  const toggleLike = useCallback(
+    (trackId: string) => {
+      setLikedIds((current) =>
+        current.includes(trackId)
+          ? current.filter(
+              (id) => id !== trackId,
+            )
+          : [...current, trackId],
+      );
 
-  const clearSearch =
-    useCallback(() => {
-      setSearch("");
-    }, []);
+      /*
+       * Keep "Liked Songs" playlist
+       * synchronized.
+       */
+      setPlaylists((current) =>
+        current.map((playlist) => {
+          if (
+            playlist.id !== "liked"
+          ) {
+            return playlist;
+          }
+
+          const alreadyLiked =
+            playlist.trackIds.includes(
+              trackId,
+            );
+
+          return {
+            ...playlist,
+            trackIds:
+              alreadyLiked
+                ? playlist.trackIds.filter(
+                    (id) =>
+                      id !== trackId,
+                  )
+                : [
+                    ...playlist.trackIds,
+                    trackId,
+                  ],
+          };
+        }),
+      );
+    },
+    [],
+  );
 
   /*
-   * -----------------------------
-   * RENDER
-   * -----------------------------
+   * Create playlist.
    */
+  const createPlaylist =
+    useCallback(() => {
+      const name =
+        newPlaylistName.trim();
+
+      if (!name) {
+        return;
+      }
+
+      const playlist: Playlist = {
+        id: makeId(),
+        name,
+        trackIds: [],
+      };
+
+      setPlaylists((current) => [
+        ...current,
+        playlist,
+      ]);
+
+      setNewPlaylistName("");
+      setIsPlaylistModalOpen(false);
+      setActivePlaylistId(
+        playlist.id,
+      );
+    }, [
+      newPlaylistName,
+    ]);
+
+  /*
+   * Delete playlist.
+   */
+  const deletePlaylist =
+    useCallback(
+      (playlistId: string) => {
+        if (
+          playlistId === "liked"
+        ) {
+          return;
+        }
+
+        setPlaylists((current) =>
+          current.filter(
+            (playlist) =>
+              playlist.id !==
+              playlistId,
+          ),
+        );
+
+        if (
+          activePlaylistId ===
+          playlistId
+        ) {
+          setActivePlaylistId(null);
+        }
+      },
+      [activePlaylistId],
+    );
+
+  /*
+   * Add a track to playlist.
+   */
+  const addToPlaylist =
+    useCallback(
+      (
+        playlistId: string,
+        trackId: string,
+      ) => {
+        setPlaylists((current) =>
+          current.map((playlist) => {
+            if (
+              playlist.id !==
+              playlistId
+            ) {
+              return playlist;
+            }
+
+            if (
+              playlist.trackIds.includes(
+                trackId,
+              )
+            ) {
+              return playlist;
+            }
+
+            return {
+              ...playlist,
+              trackIds: [
+                ...playlist.trackIds,
+                trackId,
+              ],
+            };
+          }),
+        );
+
+        setPlaylistForTrack(null);
+      },
+      [],
+    );
+
+  /*
+   * Remove a track from playlist.
+   */
+  const removeFromPlaylist =
+    useCallback(
+      (
+        playlistId: string,
+        trackId: string,
+      ) => {
+        setPlaylists((current) =>
+          current.map((playlist) => {
+            if (
+              playlist.id !==
+              playlistId
+            ) {
+              return playlist;
+            }
+
+            return {
+              ...playlist,
+              trackIds:
+                playlist.trackIds.filter(
+                  (id) =>
+                    id !== trackId,
+                ),
+            };
+          }),
+        );
+      },
+      [],
+    );
+
+  /*
+   * Cycle repeat.
+   */
+  const cycleRepeat = useCallback(
+    () => {
+      setRepeat((current) => {
+        if (current === "off") {
+          return "all";
+        }
+
+        if (current === "all") {
+          return "one";
+        }
+
+        return "off";
+      });
+    },
+    [],
+  );
+
+  /*
+   * Switch playlist.
+   */
+  const selectPlaylist =
+    useCallback(
+      (playlistId: string | null) => {
+        setActivePlaylistId(
+          playlistId,
+        );
+
+        setSelectedGenre("All");
+        setQuery("");
+        setIsSidebarOpen(false);
+      },
+      [],
+    );
+
+  if (!currentTrack) {
+    return null;
+  }
 
   return (
-    <main className="min-h-screen bg-[#09090b] text-white">
-      <div className="flex min-h-screen">
+    <div className="pulse-app">
+      <aside
+        className={`pulse-sidebar ${
+          isSidebarOpen
+            ? "pulse-sidebar-open"
+            : ""
+        }`}
+      >
+        <div className="pulse-brand">
+          <div className="pulse-logo">
+            ♪
+          </div>
 
-        {sidebarOpen && (
-          <button
-            type="button"
-            aria-label="Close navigation"
-            className="fixed inset-0 z-30 bg-black/70 lg:hidden"
-            onClick={() =>
-              setSidebarOpen(
-                false
-              )
-            }
-          />
-        )}
+          <div>
+            <div className="pulse-brand-name">
+              Pulse
+            </div>
 
-        {/* SIDEBAR */}
+            <div className="pulse-brand-sub">
+              MUSIC PLAYER
+            </div>
+          </div>
+        </div>
 
-        <aside
-          className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-white/10 bg-[#0f0f12] p-6 transition-transform lg:static lg:translate-x-0 ${
-            sidebarOpen
-              ? "translate-x-0"
-              : "-translate-x-full"
-          }`}
+        <button
+          className="pulse-mobile-close"
+          onClick={() =>
+            setIsSidebarOpen(false)
+          }
+          aria-label="Close menu"
         >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-black">
-              <Music2 size={21} />
-            </div>
+          ×
+        </button>
 
-            <div>
-              <h1 className="text-lg font-semibold">
-                Pulse
-              </h1>
-
-              <p className="text-xs text-zinc-500">
-                Music for every mood
-              </p>
-            </div>
+        <nav className="pulse-nav">
+          <div className="pulse-nav-label">
+            Library
           </div>
 
-          <nav className="mt-10 space-y-2">
+          <button
+            className={`pulse-nav-item ${
+              activePlaylistId ===
+              null
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              selectPlaylist(null)
+            }
+          >
+            <span>⌂</span>
+            Home
+          </button>
 
-            <button
-              type="button"
-              onClick={goHome}
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition ${
-                !activePlaylist
-                  ? "bg-white/10 text-white"
-                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Home size={18} />
-              Home
-            </button>
+          <button
+            className={`pulse-nav-item ${
+              activePlaylistId ===
+              "liked"
+                ? "active"
+                : ""
+            }`}
+            onClick={() =>
+              selectPlaylist("liked")
+            }
+          >
+            <span className="pulse-heart">
+              ♥
+            </span>
+            Liked Songs
+            <span className="pulse-count">
+              {likedIds.length}
+            </span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() =>
-                selectPlaylist(
-                  "Liked Songs"
-                )
-              }
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                activePlaylist ===
-                "Liked Songs"
-                  ? "bg-white/10 text-white"
-                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Library size={18} />
-              Your Library
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                selectPlaylist(
-                  "Deep Focus"
-                )
-              }
-              className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                activePlaylist ===
-                "Deep Focus"
-                  ? "bg-white/10 text-white"
-                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <ListMusic size={18} />
-              Playlists
-            </button>
-
-          </nav>
-
-          <div className="mt-10">
-            <p className="mb-3 px-4 text-xs font-semibold uppercase tracking-[0.2em] text-zinc-600">
-              Your playlists
-            </p>
-
-            <div className="space-y-1">
-
-              {(
-                [
-                  "Liked Songs",
-                  "Deep Focus",
-                  "Late Night",
-                ] as PlaylistName[]
-              ).map(
-                (playlist) => (
-                  <button
-                    key={playlist}
-                    type="button"
-                    onClick={() =>
-                      selectPlaylist(
-                        playlist
-                      )
-                    }
-                    className={`w-full rounded-lg px-4 py-2 text-left text-sm transition ${
-                      activePlaylist ===
-                      playlist
-                        ? "bg-white/10 text-white"
-                        : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                    }`}
-                  >
-                    {playlist}
-                  </button>
-                )
-              )}
-
-            </div>
+          <div className="pulse-nav-label">
+            Playlists
           </div>
 
-          <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-sm font-medium">
-              Your listening space
-            </p>
-
-            <p className="mt-1 text-xs leading-5 text-zinc-500">
-              Discover tracks,
-              build playlists
-              and keep your
-              favorite music
-              close.
-            </p>
-          </div>
-        </aside>
-
-        {/* MAIN */}
-
-        <section className="flex min-w-0 flex-1 flex-col">
-
-          {/* HEADER */}
-
-          <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-white/10 bg-[#09090b]/90 px-5 py-4 backdrop-blur-xl md:px-8">
-
-            <button
-              type="button"
-              aria-label="Open navigation"
-              className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white lg:hidden"
-              onClick={() =>
-                setSidebarOpen(
-                  true
-                )
-              }
-            >
-              <Menu size={21} />
-            </button>
-
-            <div className="relative max-w-xl flex-1">
-
-              <Search
-                size={18}
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"
-              />
-
-              <input
-                value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value
+          {playlists
+            .filter(
+              (playlist) =>
+                playlist.id !==
+                "liked",
+            )
+            .map((playlist) => (
+              <button
+                key={playlist.id}
+                className={`pulse-nav-item ${
+                  activePlaylistId ===
+                  playlist.id
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() =>
+                  selectPlaylist(
+                    playlist.id,
                   )
                 }
-                placeholder="Search songs, artists or albums..."
-                aria-label="Search music"
-                className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-11 pr-11 text-sm outline-none placeholder:text-zinc-600 focus:border-white/20"
-              />
+              >
+                <span>♫</span>
 
-              {search && (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={
-                    clearSearch
-                  }
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-zinc-500 hover:bg-white/10 hover:text-white"
+                <span
+                  style={{
+                    overflow:
+                      "hidden",
+                    textOverflow:
+                      "ellipsis",
+                    whiteSpace:
+                      "nowrap",
+                  }}
                 >
-                  <X size={16} />
-                </button>
-              )}
-
-            </div>
-
-            <div className="hidden items-center gap-2 text-xs text-zinc-600 md:flex">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              Music library ready
-            </div>
-
-          </header>
-
-          {/* CONTENT */}
-
-          <div className="flex-1 overflow-y-auto px-5 pb-44 pt-8 md:px-8">
-
-            {/* HERO */}
-
-            <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-zinc-900 to-black p-7 md:p-10">
-
-              <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-purple-500/10 blur-3xl" />
-
-              <div className="absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />
-
-              <div className="relative max-w-2xl">
-
-                <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-zinc-500">
-                  Your sound, your way
-                </p>
-
-                <h2 className="text-4xl font-semibold tracking-tight md:text-6xl">
-                  Find your next
-
-                  <span className="block text-zinc-500">
-                    favorite sound.
-                  </span>
-                </h2>
-
-                <p className="mt-5 max-w-lg text-sm leading-6 text-zinc-400 md:text-base">
-                  Search your library,
-                  explore genres and
-                  build playlists for
-                  every moment.
-                </p>
-
-                <div className="mt-7 flex flex-wrap gap-3">
-
-                  <div className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-zinc-400">
-                    {tracks.length} tracks
-                  </div>
-
-                  <div className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-zinc-400">
-                    {genres.length - 1} genres
-                  </div>
-
-                  <div className="rounded-full border border-white/10 bg-white/[0.05] px-4 py-2 text-xs text-zinc-400">
-                    {liked.length} liked
-                  </div>
-
-                </div>
-              </div>
-            </section>
-
-            {/* GENRES */}
-
-            <section className="mt-8">
-
-              <div className="flex items-center justify-between">
-
-                <h3 className="text-xl font-semibold">
-                  Browse by genre
-                </h3>
-
-                <span className="text-xs text-zinc-600">
-                  {filteredTracks.length} tracks
+                  {playlist.name}
                 </span>
 
+                <span className="pulse-count">
+                  {
+                    playlist.trackIds
+                      .length
+                  }
+                </span>
+              </button>
+            ))}
+
+          <button
+            className="pulse-nav-item"
+            onClick={() =>
+              setIsPlaylistModalOpen(
+                true,
+              )
+            }
+          >
+            <span>＋</span>
+            Create Playlist
+          </button>
+        </nav>
+
+        <div className="pulse-sidebar-card">
+          <div className="pulse-sidebar-card-icon">
+            ♫
+          </div>
+
+          <div>
+            <strong>
+              Your music space
+            </strong>
+
+            <p>
+              Create playlists and
+              organize your favorite
+              tracks.
+            </p>
+          </div>
+        </div>
+      </aside>
+
+      <main className="pulse-main">
+        <header className="pulse-header">
+          <button
+            className="pulse-menu-button"
+            onClick={() =>
+              setIsSidebarOpen(true)
+            }
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
+
+          <div className="pulse-search">
+            <span
+              style={{
+                position:
+                  "absolute",
+                left: 15,
+                top: "50%",
+                transform:
+                  "translateY(-50%)",
+                color:
+                  "var(--pulse-dim)",
+              }}
+            >
+              ⌕
+            </span>
+
+            <input
+              value={query}
+              onChange={(event) =>
+                setQuery(
+                  event.target.value,
+                )
+              }
+              placeholder="Search songs, artists, albums..."
+            />
+
+            {query && (
+              <button
+                className="pulse-search-clear"
+                onClick={() =>
+                  setQuery("")
+                }
+                aria-label="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          <div className="pulse-header-status">
+            <span className="pulse-status-dot" />
+            Music ready
+          </div>
+        </header>
+
+        <div className="pulse-content">
+          {!activePlaylist && (
+            <section className="pulse-hero">
+              <div className="pulse-hero-copy">
+                <span className="pulse-eyebrow">
+                  YOUR PERSONAL SOUNDTRACK
+                </span>
+
+                <h1>
+                  Feel the{" "}
+                  <span>
+                    Pulse.
+                  </span>
+                </h1>
+
+                <p>
+                  Discover your music,
+                  build playlists, and
+                  keep the perfect track
+                  playing through every
+                  moment.
+                </p>
+
+                <button
+                  className="pulse-primary-button"
+                  onClick={() =>
+                    playTrack(
+                      tracks[0],
+                    )
+                  }
+                >
+                  ▶ Play Music
+                </button>
               </div>
 
-              <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+              <div className="pulse-hero-art">
+                <div className="pulse-hero-glow" />
 
-                {genres.map(
-                  (genre) => (
-                    <button
-                      key={genre}
-                      type="button"
-                      onClick={() =>
-                        setSelectedGenre(
-                          genre
-                        )
-                      }
-                      className={`whitespace-nowrap rounded-full px-4 py-2 text-sm transition ${
-                        selectedGenre ===
-                        genre
-                          ? "bg-white text-black"
-                          : "border border-white/10 bg-white/[0.03] text-zinc-400 hover:bg-white/[0.08] hover:text-white"
-                      }`}
-                    >
-                      {genre}
-                    </button>
-                  )
-                )}
+                <img
+                  className="pulse-hero-image"
+                  src={tracks[0].cover}
+                  alt={tracks[0].title}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                  }}
+                />
 
+                <div className="pulse-hero-overlay">
+                  <span>
+                    NOW PLAYING
+                  </span>
+
+                  <strong>
+                    {currentTrack.title}
+                  </strong>
+
+                  <small>
+                    {currentTrack.artist}
+                  </small>
+                </div>
               </div>
             </section>
+          )}
 
-            {/* TRACKS */}
+          <section>
+            <div className="pulse-section-heading">
+              <div>
+                <span className="pulse-section-kicker">
+                  {activePlaylist
+                    ? "PLAYLIST"
+                    : "LIBRARY"}
+                </span>
 
-            <section className="mt-8">
-
-              <div className="mb-5 flex items-end justify-between gap-4">
-
-                <div>
-
-                  <p className="text-xs uppercase tracking-[0.2em] text-zinc-600">
-                    Library
-                  </p>
-
-                  <h3 className="mt-1 text-xl font-semibold">
-                    {activePlaylist ||
-                      (search
-                        ? `Results for "${search}"`
-                        : "Recommended for you")}
-                  </h3>
-
-                </div>
-
-                {activePlaylist && (
-                  <button
-                    type="button"
-                    onClick={goHome}
-                    className="text-xs text-zinc-500 hover:text-white"
-                  >
-                    View all
-                  </button>
-                )}
-
+                <h2>
+                  {activePlaylist
+                    ? activePlaylist.name
+                    : query
+                      ? "Search results"
+                      : "Your Music"}
+                </h2>
               </div>
 
-              {filteredTracks.length ===
-              0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 py-20 text-center">
+              <span className="pulse-song-count">
+                {visibleTracks.length}{" "}
+                songs
+              </span>
+            </div>
 
-                  <Music2
-                    className="mx-auto text-zinc-700"
-                    size={34}
-                  />
+            <div className="pulse-chips">
+              {genres.map((genre) => (
+                <button
+                  key={genre}
+                  className={`pulse-chip ${
+                    selectedGenre ===
+                    genre
+                      ? "active"
+                      : ""
+                  }`}
+                  onClick={() =>
+                    setSelectedGenre(
+                      genre,
+                    )
+                  }
+                >
+                  {genre}
+                </button>
+              ))}
+            </div>
 
-                  <p className="mt-4 font-medium">
-                    {activePlaylist ===
-                    "Liked Songs"
-                      ? "Your liked songs are waiting."
-                      : "No tracks found"}
-                  </p>
-
-                  <p className="mt-1 text-sm text-zinc-600">
-                    {activePlaylist ===
-                    "Liked Songs"
-                      ? "Like a song to start building your collection."
-                      : "Try another search or genre."}
-                  </p>
-
+            {visibleTracks.length ===
+            0 ? (
+              <div className="pulse-empty">
+                <div className="pulse-empty-icon">
+                  ♫
                 </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 
-                  {filteredTracks.map(
-                    (track) => {
-                      const isLiked =
-                        liked.includes(
-                          track.id
-                        );
+                <h3>
+                  No songs found
+                </h3>
 
-                      const isCurrent =
-                        currentTrack.id ===
-                        track.id;
+                <p>
+                  Try another search or
+                  playlist.
+                </p>
 
-                      return (
-                        <article
-                          key={track.id}
-                          className={`group overflow-hidden rounded-2xl border bg-white/[0.03] transition hover:-translate-y-1 hover:bg-white/[0.06] ${
-                            isCurrent
-                              ? "border-white/30 shadow-lg shadow-white/5"
-                              : "border-white/10"
-                          }`}
+                <button
+                  onClick={() => {
+                    setQuery("");
+                    setSelectedGenre(
+                      "All",
+                    );
+                  }}
+                >
+                  Clear filters
+                </button>
+              </div>
+            ) : (
+              <div className="pulse-track-list">
+                <div className="pulse-track-header">
+                  <span>#</span>
+                  <span>TRACK</span>
+                  <span>ALBUM</span>
+                  <span>GENRE</span>
+                  <span>TIME</span>
+                  <span />
+                </div>
+
+                {visibleTracks.map(
+                  (
+                    track,
+                    index,
+                  ) => {
+                    const isCurrent =
+                      track.id ===
+                      currentTrack.id;
+
+                    const liked =
+                      likedIds.includes(
+                        track.id,
+                      );
+
+                    return (
+                      <div
+                        className={`pulse-track-row ${
+                          isCurrent &&
+                          player.isPlaying
+                            ? "playing"
+                            : ""
+                        }`}
+                        key={track.id}
+                      >
+                        <div className="pulse-track-number">
+                          {isCurrent &&
+                          player.isPlaying ? (
+                            <span className="pulse-equalizer">
+                              <i />
+                              <i />
+                              <i />
+                            </span>
+                          ) : (
+                            index + 1
+                          )}
+                        </div>
+
+                        <button
+                          className="pulse-track-main"
+                          onClick={() =>
+                            playTrack(
+                              track,
+                            )
+                          }
                         >
-
-                          <div className="relative aspect-square overflow-hidden">
-
-                            <Image
+                          <div className="pulse-cover">
+                            <img
                               src={
                                 track.cover
                               }
-                              alt={`${track.title} album artwork`}
-                              fill
-                              sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
-                              className="object-cover transition duration-500 group-hover:scale-105"
+                              alt=""
+                              className="pulse-cover-image"
+                              style={{
+                                width:
+                                  "100%",
+                                height:
+                                  "100%",
+                              }}
                             />
 
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-
-                            <button
-                              type="button"
-                              aria-label={`Play ${track.title}`}
-                              onClick={() =>
-                                selectTrack(
-                                  track
-                                )
-                              }
-                              className="absolute bottom-4 right-4 flex h-11 w-11 translate-y-2 items-center justify-center rounded-full bg-white text-black opacity-0 shadow-xl transition group-hover:translate-y-0 group-hover:opacity-100 hover:scale-105"
-                            >
+                            <div className="pulse-cover-play">
                               {isCurrent &&
-                              isPlaying ? (
-                                <Pause
-                                  size={17}
-                                  fill="currentColor"
-                                />
-                              ) : (
-                                <Play
-                                  size={17}
-                                  fill="currentColor"
-                                />
-                              )}
-                            </button>
-
-                            {isCurrent && (
-                              <div className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-[10px] uppercase tracking-wider backdrop-blur-md">
-                                {isPlaying
-                                  ? "Playing"
-                                  : "Selected"}
-                              </div>
-                            )}
-
+                              player.isPlaying
+                                ? "❚❚"
+                                : "▶"}
+                            </div>
                           </div>
 
-                          <div className="p-4">
+                          <div className="pulse-track-info">
+                            <strong>
+                              {
+                                track.title
+                              }
+                            </strong>
 
-                            <div className="flex items-start justify-between gap-3">
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  selectTrack(
-                                    track
-                                  )
-                                }
-                                className="min-w-0 text-left"
-                              >
-                                <h4 className="truncate font-medium">
-                                  {track.title}
-                                </h4>
-
-                                <p className="mt-1 truncate text-sm text-zinc-500">
-                                  {track.artist}
-                                </p>
-                              </button>
-
-                              <button
-                                type="button"
-                                aria-label={
-                                  isLiked
-                                    ? `Unlike ${track.title}`
-                                    : `Like ${track.title}`
-                                }
-                                onClick={() =>
-                                  toggleLike(
-                                    track.id
-                                  )
-                                }
-                                className={`shrink-0 rounded-full p-2 transition ${
-                                  isLiked
-                                    ? "text-white"
-                                    : "text-zinc-500 hover:bg-white/10 hover:text-white"
-                                }`}
-                              >
-                                <Heart
-                                  size={17}
-                                  fill={
-                                    isLiked
-                                      ? "currentColor"
-                                      : "none"
-                                  }
-                                />
-                              </button>
-
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between text-xs text-zinc-600">
-
-                              <span>
-                                {track.genre}
-                              </span>
-
-                              <span>
-                                {formatTime(
-                                  track.duration
-                                )}
-                              </span>
-
-                            </div>
-
+                            <span>
+                              {
+                                track.artist
+                              }
+                            </span>
                           </div>
+                        </button>
 
-                        </article>
-                      );
-                    }
-                  )}
+                        <div className="pulse-album">
+                          {track.album}
+                        </div>
 
-                </div>
-              )}
+                        <div>
+                          <span className="pulse-genre">
+                            {track.genre}
+                          </span>
+                        </div>
 
-            </section>
+                        <div className="pulse-duration">
+                          {formatTime(
+                            track.duration,
+                          )}
+                        </div>
 
+                        <div
+                          style={{
+                            display:
+                              "flex",
+                            gap: 2,
+                          }}
+                        >
+                          <button
+                            className={`pulse-like ${
+                              liked
+                                ? "liked"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              toggleLike(
+                                track.id,
+                              )
+                            }
+                            aria-label="Like"
+                          >
+                            {liked
+                              ? "♥"
+                              : "♡"}
+                          </button>
+
+                          <button
+                            className="pulse-like"
+                            onClick={() =>
+                              setPlaylistForTrack(
+                                track.id,
+                              )
+                            }
+                            aria-label="Add to playlist"
+                            title="Add to playlist"
+                          >
+                            ＋
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      </main>
+
+      {isSidebarOpen && (
+        <button
+          className="pulse-backdrop"
+          onClick={() =>
+            setIsSidebarOpen(false)
+          }
+          aria-label="Close menu"
+        />
+      )}
+
+      /*
+       * Bottom player.
+       */
+      <div className="pulse-player">
+        <button
+          className="pulse-player-track"
+          onClick={() =>
+            setIsFullPlayerOpen(true)
+          }
+        >
+          <div className="pulse-player-cover">
+            <img
+              src={currentTrack.cover}
+              alt=""
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+            />
           </div>
 
-    {/* SPOTIFY-STYLE BOTTOM PLAYER */}
+          <div className="pulse-player-info">
+            <strong>
+              {currentTrack.title}
+            </strong>
 
-    <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/10 bg-[#121212]/95 px-3 py-2 backdrop-blur-xl">
+            <span>
+              {currentTrack.artist}
+            </span>
+          </div>
+        </button>
 
-<div className="mx-auto max-w-[1600px]">
-
-  <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[1fr_auto_1fr]">
-
-    {/* CURRENT TRACK */}
-
-    <div className="flex min-w-0 items-center gap-3">
-
-      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md">
-        <Image
-          src={currentTrack.cover}
-          alt={`${currentTrack.title} cover`}
-          fill
-          sizes="56px"
-          className="object-cover"
-        />
-      </div>
-
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-white">
-          {currentTrack.title}
-        </p>
-
-        <p className="truncate text-xs text-zinc-500">
-          {currentTrack.artist}
-        </p>
-      </div>
-
-      <button
-        type="button"
-        aria-label={
-          liked.includes(currentTrack.id)
-            ? "Unlike current song"
-            : "Like current song"
-        }
-        onClick={() =>
-          toggleLike(currentTrack.id)
-        }
-        className={`shrink-0 rounded-full p-2 transition ${
-          liked.includes(currentTrack.id)
-            ? "text-white"
-            : "text-zinc-500 hover:text-white"
-        }`}
-      >
-        <Heart
-          size={18}
-          fill={
-            liked.includes(currentTrack.id)
-              ? "currentColor"
-              : "none"
-          }
-        />
-      </button>
-
-    </div>
-
-{/* CENTER CONTROLS */}
-
-<div className="flex w-full max-w-3xl flex-col items-center">
-
-  <div className="flex items-center gap-7">
-
-    {/* SHUFFLE */}
-
-    <button
-      type="button"
-      aria-label="Toggle shuffle"
-      onClick={() =>
-        setShuffle((value) => !value)
-      }
-      className={`rounded-full p-2 transition ${
-        shuffle
-          ? "text-white"
-          : "text-zinc-500 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <Shuffle size={18} />
-    </button>
-
-
-    {/* PREVIOUS */}
-
-    <button
-      type="button"
-      aria-label="Previous track"
-      onClick={playPrevious}
-      className="rounded-full p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white"
-    >
-      <SkipBack
-        size={21}
-        fill="currentColor"
-      />
-    </button>
-
-
-    {/* PLAY / PAUSE */}
-
-    <button
-      type="button"
-      aria-label={
-        isPlaying
-          ? "Pause"
-          : "Play"
-      }
-      onClick={togglePlay}
-      className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black transition hover:scale-105"
-    >
-      {isPlaying ? (
-        <Pause
-          size={18}
-          fill="currentColor"
-        />
-      ) : (
-        <Play
-          size={18}
-          fill="currentColor"
-        />
-      )}
-    </button>
-
-
-    {/* NEXT */}
-
-    <button
-      type="button"
-      aria-label="Next track"
-      onClick={playNext}
-      className="rounded-full p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white"
-    >
-      <SkipForward
-        size={21}
-        fill="currentColor"
-      />
-    </button>
-
-
-    {/* REPEAT */}
-
-    <button
-      type="button"
-      aria-label="Toggle repeat"
-      onClick={() =>
-        setRepeat((value) => !value)
-      }
-      className={`rounded-full p-2 transition ${
-        repeat
-          ? "text-white"
-          : "text-zinc-500 hover:bg-white/5 hover:text-white"
-      }`}
-    >
-      <Repeat size={18} />
-    </button>
-
-  </div>
-
-
-  {/* EXPANDED PROGRESS BAR */}
-
-  <div className="mt-2 flex w-full items-center gap-3">
-
-    <span className="w-10 text-right text-[11px] text-zinc-500">
-      {formatTime(currentTime)}
-    </span>
-
-    <input
-      aria-label="Track progress"
-      type="range"
-      min="0"
-      max={
-        duration > 0
-          ? duration
-          : currentTrack.duration
-      }
-      value={Math.min(
-        currentTime,
-        duration > 0
-          ? duration
-          : currentTrack.duration
-      )}
-      onChange={(event) =>
-        seek(
-          Number(event.target.value)
-        )
-      }
-      className="h-1 flex-1 cursor-pointer accent-white"
-    />
-
-    <span className="w-10 text-[11px] text-zinc-500">
-      {formatTime(
-        duration > 0
-          ? duration
-          : currentTrack.duration
-      )}
-    </span>
-
-  </div>
-
-</div>
-
-
-    {/* VOLUME */}
-
-    <div className="hidden items-center justify-end gap-3 md:flex">
-
-      <button
-        type="button"
-        aria-label={
-          volume === 0
-            ? "Unmute"
-            : "Mute"
-        }
-        onClick={() =>
-          setVolume(
-            volume === 0
-              ? 0.8
-              : 0
-          )
-        }
-        className="text-zinc-500 transition hover:text-white"
-      >
-        {volume === 0 ? (
-          <VolumeX size={18} />
-        ) : (
-          <Volume2 size={18} />
-        )}
-      </button>
-
-      <input
-        aria-label="Volume"
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value={volume}
-        onChange={(event) =>
-          setVolume(
-            Number(
-              event.target.value
+        <button
+          className={`pulse-player-like ${
+            likedIds.includes(
+              currentTrack.id,
             )
+              ? "liked"
+              : ""
+          }`}
+          onClick={() =>
+            toggleLike(
+              currentTrack.id,
+            )
+          }
+        >
+          {likedIds.includes(
+            currentTrack.id,
           )
-        }
-        className="h-1 w-28 cursor-pointer accent-white"
-      />
+            ? "♥"
+            : "♡"}
+        </button>
 
-    </div>
+        <div className="pulse-controls">
+          <div className="pulse-control-buttons">
+            <button
+              className={
+                shuffle
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                setShuffle(
+                  (value) => !value,
+                )
+              }
+              title="Shuffle"
+            >
+              ⤨
+            </button>
 
-  </div>
+            <button
+              onClick={previousTrack}
+              title="Previous"
+            >
+              |◀
+            </button>
 
+            <button
+              className="pulse-play-button"
+              onClick={() =>
+                void player.togglePlay()
+              }
+            >
+              {player.isPlaying
+                ? "❚❚"
+                : "▶"}
+            </button>
 
-  {/* MOBILE CONTROLS */}
+            <button
+              onClick={nextTrack}
+              title="Next"
+            >
+              ▶|
+            </button>
 
-  <div className="mt-2 flex items-center justify-center gap-6 md:hidden">
+            <button
+              className={
+                repeat !== "off"
+                  ? "active"
+                  : ""
+              }
+              onClick={cycleRepeat}
+              title={`Repeat: ${repeat}`}
+            >
+              {repeat === "one"
+                ? "1↻"
+                : "↻"}
+            </button>
+          </div>
 
-    <button
-      type="button"
-      aria-label="Toggle shuffle"
-      onClick={() =>
-        setShuffle(
-          (value) => !value
-        )
-      }
-      className={
-        shuffle
-          ? "text-white"
-          : "text-zinc-600"
-      }
-    >
-      <Shuffle size={16} />
-    </button>
+          <div className="pulse-progress">
+            <span>
+              {formatTime(
+                player.currentTime,
+              )}
+            </span>
 
-    <button
-      type="button"
-      aria-label="Toggle repeat"
-      onClick={() =>
-        setRepeat(
-          (value) => !value
-        )
-      }
-      className={
-        repeat
-          ? "text-white"
-          : "text-zinc-600"
-      }
-    >
-      <Repeat size={16} />
-    </button>
+            <input
+              type="range"
+              min="0"
+              max={
+                player.duration || 1
+              }
+              step="0.1"
+              value={Math.min(
+                player.currentTime,
+                player.duration || 1,
+              )}
+              onChange={(event) =>
+                player.seek(
+                  Number(
+                    event.target.value,
+                  ),
+                )
+              }
+            />
 
-    <button
-      type="button"
-      aria-label={
-        volume === 0
-          ? "Unmute"
-          : "Mute"
-      }
-      onClick={() =>
-        setVolume(
-          volume === 0
-            ? 0.8
-            : 0
-        )
-      }
-      className="text-zinc-600"
-    >
-      {volume === 0 ? (
-        <VolumeX size={16} />
-      ) : (
-        <Volume2 size={16} />
-      )}
-    </button>
+            <span>
+              {formatTime(
+                player.duration,
+              )}
+            </span>
+          </div>
+        </div>
 
-  </div>
+        <div className="pulse-volume">
+          <button
+            onClick={() =>
+              player.setVolume(
+                player.volume > 0
+                  ? 0
+                  : 0.8,
+              )
+            }
+            aria-label="Mute"
+          >
+            {player.volume === 0
+              ? "🔇"
+              : "🔊"}
+          </button>
 
-  </div>
-</div>
-
-        </section>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={player.volume}
+            onChange={(event) =>
+              player.setVolume(
+                Number(
+                  event.target.value,
+                ),
+              )
+            }
+          />
+        </div>
       </div>
-    </main>
+
+      /*
+       * Full player.
+       */
+      <div
+  className={`pulse-full-player${
+    isFullPlayerOpen ? " open" : ""
+  }`}
+
+      >
+        <div className="pulse-full-top">
+          <button
+            onClick={() =>
+              setIsFullPlayerOpen(
+                false,
+              )
+            }
+          >
+            ↓
+          </button>
+
+          <span>
+            NOW PLAYING
+          </span>
+
+          <button
+            className={
+              likedIds.includes(
+                currentTrack.id,
+              )
+                ? "liked"
+                : ""
+            }
+            onClick={() =>
+              toggleLike(
+                currentTrack.id,
+              )
+            }
+          >
+            {likedIds.includes(
+              currentTrack.id,
+            )
+              ? "♥"
+              : "♡"}
+          </button>
+        </div>
+
+        <div className="pulse-full-art">
+          <div className="pulse-full-art-glow" />
+
+          <img
+            className={`pulse-full-image ${
+              player.isPlaying
+                ? "spinning"
+                : ""
+            }`}
+            src={currentTrack.cover}
+            alt={currentTrack.title}
+            style={{
+              width: "100%",
+              height: "100%",
+            }}
+          />
+        </div>
+
+        <div className="pulse-full-details">
+          <span>
+            {currentTrack.genre}
+          </span>
+
+          <h2>
+            {currentTrack.title}
+          </h2>
+
+          <p>
+            {currentTrack.artist} ·{" "}
+            {currentTrack.album}
+          </p>
+        </div>
+
+        <div className="pulse-full-progress">
+          <input
+            type="range"
+            min="0"
+            max={
+              player.duration || 1
+            }
+            step="0.1"
+            value={Math.min(
+              player.currentTime,
+              player.duration || 1,
+            )}
+            onChange={(event) =>
+              player.seek(
+                Number(
+                  event.target.value,
+                ),
+              )
+            }
+          />
+
+          <div>
+            <span>
+              {formatTime(
+                player.currentTime,
+              )}
+            </span>
+
+            <span>
+              {formatTime(
+                player.duration,
+              )}
+            </span>
+          </div>
+        </div>
+
+        <div className="pulse-full-controls">
+          <button
+            className={
+              shuffle
+                ? "active"
+                : ""
+            }
+            onClick={() =>
+              setShuffle(
+                (value) => !value,
+              )
+            }
+          >
+            ⤨
+          </button>
+
+          <button
+            onClick={previousTrack}
+          >
+            |◀
+          </button>
+
+          <button
+            className="pulse-full-play"
+            onClick={() =>
+              void player.togglePlay()
+            }
+          >
+            {player.isPlaying
+              ? "❚❚"
+              : "▶"}
+          </button>
+
+          <button
+            onClick={nextTrack}
+          >
+            ▶|
+          </button>
+
+          <button
+            className={
+              repeat !== "off"
+                ? "active"
+                : ""
+            }
+            onClick={cycleRepeat}
+          >
+            {repeat === "one"
+              ? "1↻"
+              : "↻"}
+          </button>
+        </div>
+
+        <div className="pulse-up-next">
+          <div className="pulse-up-next-title">
+            <span>
+              UP NEXT
+            </span>
+
+            <small>
+              {shuffle
+                ? "Shuffle"
+                : repeat ===
+                    "all"
+                  ? "Repeat all"
+                  : "Queue"}
+            </small>
+          </div>
+
+          <div className="pulse-up-next-list">
+          {upNextTracks.map((track) => (
+                <button
+                  key={track.id}
+                  onClick={() =>
+                    playTrack(
+                      track,
+                    )
+                  }
+                >
+                  <div className="pulse-mini-cover">
+                    <img
+                      src={
+                        track.cover
+                      }
+                      alt=""
+                      style={{
+                        width:
+                          "100%",
+                        height:
+                          "100%",
+                        objectFit:
+                          "cover",
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <strong>
+                      {track.title}
+                    </strong>
+
+                    <span>
+                      {track.artist}
+                    </span>
+                  </div>
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+
+      /*
+       * Create playlist modal.
+       */
+      {isPlaylistModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            background:
+              "rgba(0,0,0,.65)",
+            backdropFilter:
+              "blur(8px)",
+          }}
+        >
+          <div
+            style={{
+              width: "min(400px, 100%)",
+              padding: 24,
+              border:
+                "1px solid var(--pulse-border)",
+              borderRadius: 20,
+              background:
+                "var(--pulse-bg-2)",
+              boxShadow:
+                "0 30px 80px rgba(0,0,0,.5)",
+            }}
+          >
+            <h2
+              style={{
+                margin: "0 0 7px",
+                fontFamily:
+                  "Space Grotesk, sans-serif",
+              }}
+            >
+              Create playlist
+            </h2>
+
+            <p
+              style={{
+                margin:
+                  "0 0 18px",
+                color:
+                  "var(--pulse-muted)",
+                fontSize: 12,
+              }}
+            >
+              Give your new playlist
+              a name.
+            </p>
+
+            <input
+              autoFocus
+              value={newPlaylistName}
+              onChange={(event) =>
+                setNewPlaylistName(
+                  event.target.value,
+                )
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key ===
+                  "Enter"
+                ) {
+                  createPlaylist();
+                }
+              }}
+              placeholder="My playlist"
+              style={{
+                width: "100%",
+                height: 44,
+                padding:
+                  "0 13px",
+                border:
+                  "1px solid var(--pulse-border)",
+                borderRadius: 11,
+                outline: "none",
+                color:
+                  "var(--pulse-text)",
+                background:
+                  "var(--pulse-panel)",
+              }}
+            />
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "flex-end",
+                gap: 8,
+                marginTop: 15,
+              }}
+            >
+              <button
+                onClick={() =>
+                  setIsPlaylistModalOpen(
+                    false,
+                  )
+                }
+                style={{
+                  padding:
+                    "9px 14px",
+                  border: 0,
+                  borderRadius: 9,
+                  color:
+                    "var(--pulse-muted)",
+                  background:
+                    "var(--pulse-panel)",
+                }}
+              >
+                Cancel
+              </button>
+
+              <button
+                className="pulse-primary-button"
+                onClick={
+                  createPlaylist
+                }
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      /*
+       * Add to playlist modal.
+       */
+      {playlistForTrack && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+            background:
+              "rgba(0,0,0,.65)",
+            backdropFilter:
+              "blur(8px)",
+          }}
+        >
+          <div
+            style={{
+              width: "min(430px, 100%)",
+              maxHeight:
+                "70vh",
+              overflowY: "auto",
+              padding: 24,
+              border:
+                "1px solid var(--pulse-border)",
+              borderRadius: 20,
+              background:
+                "var(--pulse-bg-2)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent:
+                  "space-between",
+                alignItems:
+                  "center",
+                marginBottom: 16,
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontFamily:
+                      "Space Grotesk, sans-serif",
+                  }}
+                >
+                  Add to playlist
+                </h2>
+
+                <p
+                  style={{
+                    margin:
+                      "5px 0 0",
+                    color:
+                      "var(--pulse-muted)",
+                    fontSize: 11,
+                  }}
+                >
+                  Choose where to
+                  save this song.
+                </p>
+              </div>
+
+              <button
+                onClick={() =>
+                  setPlaylistForTrack(
+                    null,
+                  )
+                }
+                style={{
+                  width: 34,
+                  height: 34,
+                  border: 0,
+                  borderRadius: 9,
+                  color:
+                    "var(--pulse-muted)",
+                  background:
+                    "var(--pulse-panel)",
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {playlists
+              .filter(
+                (playlist) =>
+                  playlist.id !==
+                  "liked",
+              )
+              .map((playlist) => {
+                const hasTrack =
+                  playlist.trackIds.includes(
+                    playlistForTrack,
+                  );
+
+                return (
+                  <button
+                    key={playlist.id}
+                    onClick={() => {
+                      if (
+                        hasTrack
+                      ) {
+                        removeFromPlaylist(
+                          playlist.id,
+                          playlistForTrack,
+                        );
+
+                        setPlaylistForTrack(
+                          null,
+                        );
+                      } else {
+                        addToPlaylist(
+                          playlist.id,
+                          playlistForTrack,
+                        );
+                      }
+                    }}
+                    style={{
+                      width:
+                        "100%",
+                      display:
+                        "flex",
+                      alignItems:
+                        "center",
+                      justifyContent:
+                        "space-between",
+                      padding:
+                        "12px 10px",
+                      marginBottom:
+                        5,
+                      border: 0,
+                      borderRadius:
+                        10,
+                      color:
+                        "var(--pulse-text)",
+                      background:
+                        "transparent",
+                      textAlign:
+                        "left",
+                    }}
+                  >
+                    <span>
+                      ♫{" "}
+                      {playlist.name}
+                    </span>
+
+                    <span
+                      style={{
+                        color:
+                          hasTrack
+                            ? "var(--pulse-pink)"
+                            : "var(--pulse-dim)",
+                        fontSize: 11,
+                      }}
+                    >
+                      {hasTrack
+                        ? "Added"
+                        : "Add"}
+                    </span>
+                  </button>
+                );
+              })}
+
+            <button
+              className="pulse-primary-button"
+              style={{
+                marginTop: 10,
+                width: "100%",
+                justifyContent:
+                  "center",
+              }}
+              onClick={() => {
+                setPlaylistForTrack(
+                  null,
+                );
+                setIsPlaylistModalOpen(
+                  true,
+                );
+              }}
+            >
+              ＋ Create New Playlist
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
-

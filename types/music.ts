@@ -1,17 +1,9 @@
-export type Genre =
-  | "All"
-  | "Electronic"
-  | "Pop"
-  | "Hip-Hop"
-  | "Ambient"
-  | "Rock";
-
 export type Track = {
   id: string;
   title: string;
   artist: string;
   album: string;
-  genre: Exclude<Genre, "All">;
+  genre: string;
   duration: number;
   cover: string;
   audioUrl: string;
